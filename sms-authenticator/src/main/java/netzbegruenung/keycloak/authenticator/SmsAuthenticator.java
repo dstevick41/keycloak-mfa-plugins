@@ -19,7 +19,6 @@
  * @author Netzbegruenung e.V.
  * @author verdigado eG
  */
-
 package netzbegruenung.keycloak.authenticator;
 
 import netzbegruenung.keycloak.authenticator.credentials.SmsAuthCredentialData;
@@ -54,111 +53,119 @@ import java.util.List;
 
 public class SmsAuthenticator implements Authenticator, CredentialValidator<SmsAuthCredentialProvider> {
 
-	private static final Logger logger = Logger.getLogger(SmsAuthenticator.class);
-	private static final String TPL_CODE = "login-sms.ftl";
+    private static final Logger logger = Logger.getLogger( SmsAuthenticator.class );
+    private static final String TPL_CODE = "login-sms.ftl";
 
-	@Override
-	public void authenticate(AuthenticationFlowContext context) {
-		AuthenticatorConfigModel config = context.getAuthenticatorConfig();
-		KeycloakSession session = context.getSession();
-		UserModel user = context.getUser();
-		RealmModel realm = context.getRealm();
+    @Override
+    public void authenticate( AuthenticationFlowContext context ) {
+        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+        KeycloakSession session = context.getSession();
+        UserModel user = context.getUser();
+        RealmModel realm = context.getRealm();
 
-		Optional<CredentialModel> model = context.getUser().credentialManager().getStoredCredentialsByTypeStream(SmsAuthCredentialModel.TYPE).findFirst();
-		String mobileNumber;
-		try {
-			mobileNumber = JsonSerialization.readValue(model.orElseThrow().getCredentialData(), SmsAuthCredentialData.class).getMobileNumber();
-		} catch (IOException e1) {
-			logger.warn(e1.getMessage(), e1);
-			return;
-		}
+        Optional<CredentialModel> model = context.getUser().credentialManager()
+                                  .getStoredCredentialsByTypeStream( SmsAuthCredentialModel.TYPE ).findFirst();
+        String mobileNumber;
+        try {
+            mobileNumber = JsonSerialization.readValue( model.orElseThrow().getCredentialData(), SmsAuthCredentialData.class )
+            .getMobileNumber();
+        }
+        catch ( IOException e1 ) {
+            logger.warn( e1.getMessage(), e1 );
+            return;
+        }
 
-		int length = Integer.parseInt(config.getConfig().get("length"));
-		int ttl = Integer.parseInt(config.getConfig().get("ttl"));
+        int length = Integer.parseInt( config.getConfig().get( "length" ) );
+        int ttl = Integer.parseInt( config.getConfig().get( "ttl" ) );
 
-		String code = SecretGenerator.getInstance().randomString(length, SecretGenerator.DIGITS);
-		AuthenticationSessionModel authSession = context.getAuthenticationSession();
-		authSession.setAuthNote("code", code);
-		authSession.setAuthNote("ttl", Long.toString(System.currentTimeMillis() + (ttl * 1000L)));
+        String code = SecretGenerator.getInstance().randomString( length, SecretGenerator.DIGITS );
+        AuthenticationSessionModel authSession = context.getAuthenticationSession();
+        authSession.setAuthNote( "code", code );
+        authSession.setAuthNote( "ttl", Long.toString( System.currentTimeMillis() + ( ttl * 1000L ) ) );
 
-		try {
-			Theme theme = session.theme().getTheme(Theme.Type.LOGIN);
-			Locale locale = session.getContext().resolveLocale(user);
-			String smsAuthText = theme.getEnhancedMessages(realm,locale).getProperty("smsAuthText");
-			String smsText = String.format(smsAuthText, code, Math.floorDiv(ttl, 60));
+        try {
+            Theme theme = session.theme().getTheme( Theme.Type.LOGIN );
+            Locale locale = session.getContext().resolveLocale( user );
+            String smsAuthText = theme.getEnhancedMessages( realm, locale ).getProperty( "smsAuthText" );
+            String smsText = String.format( smsAuthText, code, Math.floorDiv( ttl, 60 ) );
 
-			SmsServiceFactory.get(config.getConfig()).send(mobileNumber, smsText);
+            SmsServiceFactory.get( config.getConfig() ).send( mobileNumber, smsText );
 
-			context.challenge(context.form().setAttribute("realm", realm).createForm(TPL_CODE));
-		} catch (Exception e) {
-			context.failureChallenge(AuthenticationFlowError.INTERNAL_ERROR,
-				context.form().setError("smsAuthSmsNotSent", "Error. Use another method.")
-					.createErrorPage(Response.Status.INTERNAL_SERVER_ERROR));
-		}
-	}
+            context.challenge( context.form().setAttribute( "realm", realm ).createForm( TPL_CODE ) );
+        }
+        catch ( IOException e ) {
+            context.failureChallenge( AuthenticationFlowError.INTERNAL_ERROR,
+                                      context.form().setError( "smsAuthSmsNotSent", "Error. Use another method." )
+                                              .createErrorPage( Response.Status.INTERNAL_SERVER_ERROR ) );
+        }
+    }
 
-	@Override
-	public void action(AuthenticationFlowContext context) {
-		String enteredCode = context.getHttpRequest().getDecodedFormParameters().getFirst("code");
+    @Override
+    public void action( AuthenticationFlowContext context ) {
+        String enteredCode = context.getHttpRequest().getDecodedFormParameters().getFirst( "code" );
 
-		AuthenticationSessionModel authSession = context.getAuthenticationSession();
-		String code = authSession.getAuthNote("code");
-		String ttl = authSession.getAuthNote("ttl");
+        AuthenticationSessionModel authSession = context.getAuthenticationSession();
+        String code = authSession.getAuthNote( "code" );
+        String ttl = authSession.getAuthNote( "ttl" );
 
-		if (code == null || ttl == null) {
-			context.failureChallenge(AuthenticationFlowError.INTERNAL_ERROR,
-				context.form().createErrorPage(Response.Status.INTERNAL_SERVER_ERROR));
-			return;
-		}
+        if ( code == null || ttl == null ) {
+            context.failureChallenge( AuthenticationFlowError.INTERNAL_ERROR,
+                                      context.form().createErrorPage( Response.Status.INTERNAL_SERVER_ERROR ) );
+            return;
+        }
 
-		boolean isValid = enteredCode.equals(code);
-		if (isValid) {
-			if (Long.parseLong(ttl) < System.currentTimeMillis()) {
-				// expired
-				context.failureChallenge(AuthenticationFlowError.EXPIRED_CODE,
-					context.form().setError("smsAuthCodeExpired").createErrorPage(Response.Status.BAD_REQUEST));
-			} else {
-				// valid
-				context.success();
-			}
-		} else {
-			// invalid
-			AuthenticationExecutionModel execution = context.getExecution();
-			if (execution.isRequired()) {
-				context.failureChallenge(AuthenticationFlowError.INVALID_CREDENTIALS,
-					context.form().setAttribute("realm", context.getRealm())
-						.setError("smsAuthCodeInvalid").createForm(TPL_CODE));
-			} else if (execution.isConditional() || execution.isAlternative()) {
-				context.attempted();
-			}
-		}
-	}
+        boolean isValid = enteredCode.equals( code );
+        if ( isValid ) {
+            if ( Long.parseLong( ttl ) < System.currentTimeMillis() ) {
+                // expired
+                context.failureChallenge( AuthenticationFlowError.EXPIRED_CODE,
+                                          context.form().setError( "smsAuthCodeExpired" ).createErrorPage( Response.Status.BAD_REQUEST ) );
+            }
+            else {
+                // valid
+                context.success();
+            }
+        }
+        else {
+            // invalid
+            AuthenticationExecutionModel execution = context.getExecution();
+            if ( execution.isRequired() ) {
+                context.failureChallenge( AuthenticationFlowError.INVALID_CREDENTIALS,
+                                          context.form().setAttribute( "realm", context.getRealm() )
+                                                  .setError( "smsAuthCodeInvalid" ).createForm( TPL_CODE ) );
+            }
+            else if ( execution.isConditional() || execution.isAlternative() ) {
+                context.attempted();
+            }
+        }
+    }
 
-	@Override
-	public boolean requiresUser() {
-		return true;
-	}
+    @Override
+    public boolean requiresUser() {
+        return true;
+    }
 
-	@Override
-	public boolean configuredFor(KeycloakSession session, RealmModel realm, UserModel user) {
-		return getCredentialProvider(session).isConfiguredFor(realm, user, getType(session));
-	}
+    @Override
+    public boolean configuredFor( KeycloakSession session, RealmModel realm, UserModel user ) {
+        return getCredentialProvider( session ).isConfiguredFor( realm, user, getType( session ) );
+    }
 
-	@Override
-	public void setRequiredActions(KeycloakSession session, RealmModel realm, UserModel user) {
-		user.addRequiredAction(PhoneNumberRequiredAction.PROVIDER_ID);
-	}
+    @Override
+    public void setRequiredActions( KeycloakSession session, RealmModel realm, UserModel user ) {
+        user.addRequiredAction( PhoneNumberRequiredAction.PROVIDER_ID );
+    }
 
-	public List<RequiredActionFactory> getRequiredActions(KeycloakSession session) {
-		return Collections.singletonList((PhoneNumberRequiredActionFactory)session.getKeycloakSessionFactory().getProviderFactory(RequiredActionProvider.class, PhoneNumberRequiredAction.PROVIDER_ID));
-	}
+    @Override
+    public List<RequiredActionFactory> getRequiredActions( KeycloakSession session ) {
+        return Collections.singletonList( (PhoneNumberRequiredActionFactory)session.getKeycloakSessionFactory().getProviderFactory( RequiredActionProvider.class, PhoneNumberRequiredAction.PROVIDER_ID ) );
+    }
 
-	@Override
-	public void close() {
-	}
+    @Override
+    public void close() {
+    }
 
-	@Override
-	public SmsAuthCredentialProvider getCredentialProvider(KeycloakSession session) {
-		return (SmsAuthCredentialProvider)session.getProvider(CredentialProvider.class, SmsAuthCredentialProviderFactory.PROVIDER_ID);
-	}
+    @Override
+    public SmsAuthCredentialProvider getCredentialProvider( KeycloakSession session ) {
+        return (SmsAuthCredentialProvider)session.getProvider( CredentialProvider.class, SmsAuthCredentialProviderFactory.PROVIDER_ID );
+    }
 }

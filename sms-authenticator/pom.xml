@@ -12,30 +12,46 @@
         <version>26.0.6</version>
     </parent>
 
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <aws.version>2.25.67</aws.version>
+    </properties>
+
     <dependencies>
-		<dependency>
-			<groupId>org.keycloak</groupId>
-			<artifactId>keycloak-quarkus-server-app</artifactId>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>com.googlecode.libphonenumber</groupId>
-			<artifactId>libphonenumber</artifactId>
-			<version>8.13.50</version>
-		</dependency>
-		<!-- Necessary for proper execution of IDELauncher -->
-		<!-- Can be removed as part of the https://github.com/keycloak/keycloak/issues/22455 enhancement -->
-		<dependency>
-			<groupId>io.quarkus</groupId>
-			<artifactId>quarkus-vertx-http-dev-ui-resources</artifactId>
-			<scope>provided</scope>
-		</dependency>
-		<!-- this dependency is necessary to start the IDELauncher -->
-		<dependency>
-			<groupId>com.oracle.database.jdbc</groupId>
-			<artifactId>ojdbc11</artifactId>
-			<scope>provided</scope>
-		</dependency>
+        <dependency>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-quarkus-server-app</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.googlecode.libphonenumber</groupId>
+            <artifactId>libphonenumber</artifactId>
+            <version>8.13.50</version>
+        </dependency>
+        <!-- Necessary for proper execution of IDELauncher -->
+        <!-- Can be removed as part of the https://github.com/keycloak/keycloak/issues/22455 enhancement -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-vertx-http-dev-ui-resources</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!-- this dependency is necessary to start the IDELauncher -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc11</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sns</artifactId>
+            <version>${aws.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
     </dependencies>
 
     <build>
@@ -49,40 +65,40 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
-			<plugin>
-				<groupId>io.quarkus</groupId>
-				<artifactId>quarkus-maven-plugin</artifactId>
-				<configuration>
-					<argsString>start-dev --db-url jdbc:h2:file:${project.parent.basedir}/h2db/sms;AUTO_SERVER=TRUE;NON_KEYWORDS=VALUE</argsString>
-				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-shade-plugin</artifactId>
-				<executions>
-					<execution>
-						<phase>package</phase>
-						<goals>
-							<goal>shade</goal>
-						</goals>
-						<configuration>
-							<artifactSet>
-								<includes>
-									<include>com.googlecode.libphonenumber:libphonenumber</include>
-								</includes>
-							</artifactSet>
-							<filters>
-								<filter>
-									<artifact>com.googlecode.libphonenumber:libphonenumber</artifact>
-									<excludes>
-										<exclude>META-INF/MANIFEST.MF</exclude>
-									</excludes>
-								</filter>
-							</filters>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
+            <plugin>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+                <configuration>
+                    <argsString>start-dev --db-url jdbc:h2:file:${project.parent.basedir}/h2db/sms;AUTO_SERVER=TRUE;NON_KEYWORDS=VALUE</argsString>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <artifactSet>
+                                <includes>
+                                    <include>com.googlecode.libphonenumber:libphonenumber</include>
+                                </includes>
+                            </artifactSet>
+                            <filters>
+                                <filter>
+                                    <artifact>com.googlecode.libphonenumber:libphonenumber</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 

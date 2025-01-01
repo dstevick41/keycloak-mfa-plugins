@@ -1,1 +1,3 @@
 netzbegruenung.keycloak.authenticator.SmsAuthenticatorFactory
+netzbegruenung.keycloak.authenticator.SmsOtpDirectGrantAuthenticatorFactory
+netzbegruenung.keycloak.authenticator.TimeOtpDirectGrantAuthenticatorFactory
